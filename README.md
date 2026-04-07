@@ -2,7 +2,7 @@
 
 > **Your code doesn't live at GitHub.  It just visits.**
 
-GitDR is a self-hosted, encrypted Git backup and restore system. It continuously mirrors repositories from every major Git forge to storage you control — so when a provider goes down, goes dark, or locks your account, you can be back online in hours, not weeks.
+GitDR is a self-hosted, encrypted Git backup and restore system. It continuously mirrors repositories from every major Git forge to storage you control — so when a provider goes down, goes dark, or locks your account, you can be back online in minutes, not weeks.
 
 ---
 
@@ -41,7 +41,7 @@ GitDR solves this by ensuring you always have a current, verified, restorable co
 
 1. Connects to your forges via API and discovers every repository automatically
 2. Creates or updates an incremental mirror cache (only fetches deltas after the first run)
-3. Produces a portable Git bundle or tar+zstd archive — a complete, self-contained backup
+3. Produces a portable Git bundle — a complete, self-contained backup
 4. Uploads it to a storage backend you control, with a deterministic key structure
 5. Verifies the archive with a SHA-256 checksum before recording success
 6. Enforces a retention policy, removing old backups beyond the count you specify
@@ -165,7 +165,7 @@ RPO is directly controlled by your backup schedule. Nightly backups give you 24-
 
 ### No Vendor Lock-in
 
-Archives are standard Git bundles or tar archives. You can restore them with nothing but `git` and `tar`. GitDR is a convenience layer, not a dependency — if GitDR itself were unavailable, you could restore from the raw archives manually.
+Archives are standard Git bundles. You can restore them with just `git`. GitDR is a convenience layer, not a dependency — if GitDR itself were unavailable, you could restore from the raw archives manually.
 
 ### Regulatory and Compliance Value
 
