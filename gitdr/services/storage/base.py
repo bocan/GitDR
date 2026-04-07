@@ -22,20 +22,20 @@ class StorageBackend(Protocol):
 
     async def upload(self, local_path: Path, remote_key: str) -> None:
         """Copy *local_path* to *remote_key* on the backend."""
-        ...
+        raise NotImplementedError
 
     async def download(self, remote_key: str, local_path: Path) -> None:
         """Fetch *remote_key* from the backend and write it to *local_path*."""
-        ...
+        raise NotImplementedError
 
     async def delete(self, remote_key: str) -> None:
         """Remove *remote_key* from the backend."""
-        ...
+        raise NotImplementedError
 
     async def list_keys(self, prefix: str) -> list[str]:
         """Return all keys under *prefix* (non-recursive listing including sub-paths)."""
-        ...
+        raise NotImplementedError
 
     async def exists(self, remote_key: str) -> bool:
         """Return True if *remote_key* exists on the backend."""
-        ...
+        raise NotImplementedError

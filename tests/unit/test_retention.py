@@ -19,10 +19,15 @@ class MockStorage:
         self._keys.remove(key)
         self.deleted.append(key)
 
-    # Unused protocol methods
-    async def upload(self, *a: object, **kw: object) -> None: ...
-    async def download(self, *a: object, **kw: object) -> None: ...
-    async def exists(self, *a: object, **kw: object) -> bool: ...
+    # Stub protocol methods not exercised by retention tests
+    async def upload(self, *a: object, **kw: object) -> None:  # lgtm[py/statement-has-no-effect]
+        raise NotImplementedError
+
+    async def download(self, *a: object, **kw: object) -> None:  # lgtm[py/statement-has-no-effect]
+        raise NotImplementedError
+
+    async def exists(self, *a: object, **kw: object) -> bool:  # lgtm[py/statement-has-no-effect]
+        raise NotImplementedError
 
 
 @pytest.mark.asyncio

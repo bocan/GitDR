@@ -8,7 +8,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-import gitdr.database.models  # noqa: F401
 from gitdr.api.deps import get_fernet, get_session
 from gitdr.database.models import GitSource, Repository
 from gitdr.main import app

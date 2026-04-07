@@ -10,7 +10,6 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-import gitdr.database.models  # noqa: F401
 from gitdr.api.deps import get_fernet, get_session
 from gitdr.database.models import BackupDestination, GitSource
 from gitdr.main import app
@@ -196,11 +195,14 @@ class TestDeleteJob:
     def test_deletes_job(self, client, source_id, dest_id):
         create = client.post("/api/v1/jobs/", json=_job_payload(source_id, dest_id, "deleteme-job"))
         jid = create.json()["id"]
-        assert client.delete(f"/api/v1/jobs/{jid}").status_code == 204
-        assert client.get(f"/api/v1/jobs/{jid}").status_code == 404
+        resp_delete = client.delete(f"/api/v1/jobs/{jid}")
+        assert resp_delete.status_code == 204
+        resp_get = client.get(f"/api/v1/jobs/{jid}")
+        assert resp_get.status_code == 404
 
     def test_unknown_id_returns_404(self, client):
-        assert client.delete(f"/api/v1/jobs/{uuid4()}").status_code == 404
+        resp = client.delete(f"/api/v1/jobs/{uuid4()}")
+        assert resp.status_code == 404
 
 
 # ---------------------------------------------------------------------------

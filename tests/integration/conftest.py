@@ -16,7 +16,7 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlmodel import SQLModel
 
-import gitdr.database.models  # noqa: F401  — populate SQLModel.metadata
+import gitdr.database.models  # noqa: F401 # lgtm[py/unused-import] — side-effect import: populates SQLModel.metadata
 
 
 def _make_sqlite_engine():

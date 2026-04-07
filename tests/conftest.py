@@ -17,7 +17,7 @@ from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel
 
 # Import all models so SQLModel.metadata is fully populated before create_all.
-import gitdr.database.models  # noqa: F401
+import gitdr.database.models  # noqa: F401 # lgtm[py/unused-import] — side-effect import: populates SQLModel.metadata
 
 
 @pytest.fixture(scope="function")

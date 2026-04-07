@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel, create_engine
 
-import gitdr.database.models  # noqa: F401
+import gitdr.database.models  # noqa: F401 # lgtm[py/unused-import] — side-effect import: populates SQLModel.metadata
 from gitdr.api.deps import get_fernet, get_session
 from gitdr.main import app
 

@@ -489,7 +489,7 @@ def upsert_repos(
     updated_count = len(discovered) - new_count
     logger.info(
         "Discovery for source %s: %d new repo(s), %d updated",
-        source_id,
+        str(source_id),
         new_count,
         updated_count,
     )

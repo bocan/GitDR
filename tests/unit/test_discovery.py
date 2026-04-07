@@ -18,7 +18,6 @@ from sqlalchemy import create_engine
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, SQLModel
 
-import gitdr.database.models  # noqa: F401 — populate SQLModel.metadata
 from gitdr.database.models import GitSource, Repository
 from gitdr.services.discovery import (
     DiscoveredRepo,

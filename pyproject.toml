@@ -11,14 +11,14 @@ requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [
     "fastapi==0.135.3",
-    "uvicorn[standard]==0.43.0",
+    "uvicorn[standard]==0.44.0",
     "sqlmodel==0.0.38",
     "cryptography==46.0.6",
     # APScheduler v4 is pre-release (4.0.0a6). Pin this exact version.
     # Do not upgrade without running the full test suite.
     "apscheduler==4.0.0a6",
     "anyio==4.13.0",
-    "boto3==1.42.83",
+    "boto3==1.42.84",
     "azure-storage-blob==12.28.0",
     "google-cloud-storage==3.10.1",
     "jinja2>=3.1",
