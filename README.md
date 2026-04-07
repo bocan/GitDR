@@ -23,14 +23,14 @@ GitDR solves this by ensuring you always have a current, verified, restorable co
 ## What GitDR Does
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  Your Git Forges          GitDR             Your Storage    │
-│                                                             │
-│  GitHub ──────────┐                                         │
+┌──────────────────────────────────────────────────────────────────────────┐
+│  Your Git Forges                    GitDR                Your Storage    │
+│                                                                          │
+│  GitHub ──────────┐                                                      │
 │  GitLab ──────────┤──► Discover ──► Mirror ──► Archive ──► │ S3 / Azure  │
-│  Azure DevOps ────┤    Validate     Cache      Encrypt    │ GCS / Local │
-│  Bitbucket ───────┘                                         │
-└─────────────────────────────────────────────────────────────┘
+│  Azure DevOps ────┤    Validate     Cache      Encrypt     │ GCS / Local │
+│  Bitbucket ───────┘                                                      │
+└──────────────────────────────────────────────────────────────────────────┘
                               │
                               ▼
                     Web UI + REST API
