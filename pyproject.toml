@@ -6,7 +6,7 @@ build-backend = "hatchling.build"
 name = "gitdr"
 version = "0.1.0"
 description = "Self-hosted Git repository backup and restore tool"
-readme = "SPEC.md"
+readme = "README.md"
 requires-python = ">=3.14"
 license = { text = "MIT" }
 dependencies = [

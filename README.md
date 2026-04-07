@@ -279,7 +279,7 @@ A backup you have never restored is a backup you don't trust. Use GitDR's restor
 │  ├── git_ops.py      subprocess wrappers (no shell=True)│
 │  ├── discovery.py    Forge API clients, repo cache      │
 │  ├── retention.py    Enforce keep-N policy              │
-│  └── storage/        local · s3 · azure_blob · gcs     │
+│  └── storage/        local · s3 · azure_blob · gcs      │
 │                                                         │
 │  Database: SQLCipher (AES-256)                          │
 │  ├── Credentials encrypted at field level (Fernet)      │
