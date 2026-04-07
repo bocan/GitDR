@@ -1,0 +1,413 @@
+{% extends "base.html" %}
+{% block title %}Sources — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Sources</h1>
+    <p class="page-sub">Git forges to mirror repositories from</p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-primary" onclick="openCreateSourceModal()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
+      </svg>
+      Add Source
+    </button>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="card">
+    {% if sources %}
+    <div class="table-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Organisation</th>
+            <th class="text-right">Repos</th>
+            <th>API URL</th>
+            <th class="col-compact"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for source in sources %}
+          <tr>
+            <td>
+              <a href="/sources/{{ source.id }}" style="font-weight:500; transition:color .1s"
+                onmouseenter="this.style.color='var(--mint)'" onmouseleave="this.style.color=''">
+                {{ source.name }}
+              </a>
+            </td>
+            <td>
+              {% if source.forge_type == 'github' %}
+                <span class="chip chip-mint">github</span>
+              {% elif source.forge_type == 'gitlab' %}
+                <span class="chip chip-amber">gitlab</span>
+              {% elif source.forge_type == 'azure_devops' %}
+                <span class="chip chip-sky">azure</span>
+              {% elif source.forge_type == 'bitbucket' %}
+                <span class="chip chip-sky">bitbucket</span>
+              {% else %}
+                <span class="chip">{{ source.forge_type }}</span>
+              {% endif %}
+            </td>
+            <td class="mono" style="font-size:12px">{{ source.org_or_group or '—' }}</td>
+            <td class="text-right">
+              <span class="mono">{{ repo_counts.get(source.id, 0) }}</span>
+            </td>
+            <td>
+              {% if source.base_url %}
+              <span class="mono text-muted" style="font-size:11px">{{ source.base_url }}</span>
+              {% else %}
+              <span class="text-muted">default</span>
+              {% endif %}
+            </td>
+            <td class="col-compact">
+              <div class="flex gap-2">
+                <a href="/sources/{{ source.id }}" class="btn btn-ghost btn-sm">View</a>
+                <button class="btn btn-ghost btn-sm"
+                  onclick="openEditSourceModal('{{ source.id }}','{{ source.name }}','{{ source.forge_type }}','{{ source.auth_type }}','{{ source.org_or_group or '' }}','{{ source.base_url }}')">
+                  Edit
+                </button>
+                <button class="btn btn-danger btn-sm"
+                  hx-delete="/api/v1/sources/{{ source.id }}"
+                  data-confirm="Delete '{{ source.name }}'? This removes all its repositories too."
+                  hx-on::after-request="reloadOnSuccess(event)">
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <svg class="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="14" cy="10" r="5"/>
+        <circle cx="14" cy="38" r="5"/>
+        <circle cx="38" cy="18" r="5"/>
+        <line x1="14" y1="15" x2="14" y2="33"/>
+        <path d="M14 15 Q14 18 38 18" fill="none"/>
+      </svg>
+      <div class="empty-title">No sources configured</div>
+      <div class="empty-sub">Connect a GitHub, GitLab, or other forge to start mirroring repositories.</div>
+      <button class="btn btn-primary" onclick="openCreateSourceModal()">Add your first source</button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── CREATE SOURCE MODAL ───────────────────────────────── -->
+<div id="modal-create-source" class="modal-bg">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Add Git Source</span>
+      <button class="btn-icon" onclick="closeModal('modal-create-source')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-create-source"
+          hx-post="/api/v1/sources/"
+          hx-ext="json-enc"
+          hx-on::after-request="reloadOnSuccess(event)">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="src-name">Display Name</label>
+          <input id="src-name" name="name" class="form-input" type="text" required
+                 placeholder="e.g. My GitHub Org">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="src-type">Forge Type</label>
+            <select id="src-type" name="forge_type" class="form-select" required
+                    onchange="updateSourceDefaults(this.value); invalidateSourceTest('create')">
+              <option value="github">GitHub</option>
+              <option value="gitlab">GitLab</option>
+              <option value="azure_devops">Azure DevOps</option>
+              <option value="bitbucket">Bitbucket</option>
+              <option value="generic">Generic Git</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="src-auth-type">Auth Type</label>
+            <select id="src-auth-type" name="auth_type" class="form-select" required>
+              <option value="pat">Personal Access Token</option>
+              <option value="oauth">OAuth Token</option>
+              <option value="app_token">App Token</option>
+              <option value="ssh_key">SSH Key</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="src-org">Organisation / Group <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+          <input id="src-org" name="org_or_group" class="form-input" type="text"
+                 placeholder="e.g. my-org"
+                 oninput="invalidateSourceTest('create')">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="src-token">Access Token <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(encrypted at rest)</span></label>
+          <input id="src-token" name="auth_credential" class="form-input" type="password"
+                 placeholder="ghp_... or personal access token" required
+                 oninput="invalidateSourceTest('create')">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="src-baseurl">API URL</label>
+          <input id="src-baseurl" name="base_url" class="form-input" type="text"
+                 placeholder="https://api.github.com" required
+                 oninput="invalidateSourceTest('create')">
+        </div>
+        <!-- Connection test -->
+        <div class="form-group" style="margin-bottom:0">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button type="button" class="btn btn-ghost btn-sm"
+              hx-post="/api/v1/sources/test-connection"
+              hx-include="#form-create-source"
+              hx-ext="json-enc"
+              hx-swap="none"
+              hx-on::after-request="handleSourceTestResult(event)">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:13px;height:13px">
+                <path d="M2 8h2l2-4 3 8 2-4h3"/>
+              </svg>
+              Test Connection
+            </button>
+            <span id="src-test-result" style="font-size:12px"></span>
+          </div>
+          <p class="form-hint" style="margin-top:6px">Connection must be verified before saving.</p>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-create-source')">Cancel</button>
+        <button id="btn-create-source-submit" type="submit" class="btn btn-primary" disabled
+                title="Test the connection above before saving">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
+          </svg>
+          Create Source
+        </button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── EDIT SOURCE MODAL ─────────────────────────────────── -->
+<div id="modal-edit-source" class="modal-bg">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Edit Git Source</span>
+      <button class="btn-icon" onclick="closeModal('modal-edit-source')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-edit-source">
+      <input type="hidden" id="edit-src-id">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label" for="edit-src-name">Display Name</label>
+          <input id="edit-src-name" name="name" class="form-input" type="text" required
+                 placeholder="e.g. My GitHub Org">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="edit-src-type">Forge Type</label>
+            <select id="edit-src-type" name="forge_type" class="form-select" required>
+              <option value="github">GitHub</option>
+              <option value="gitlab">GitLab</option>
+              <option value="azure_devops">Azure DevOps</option>
+              <option value="bitbucket">Bitbucket</option>
+              <option value="generic">Generic Git</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="edit-src-auth-type">Auth Type</label>
+            <select id="edit-src-auth-type" name="auth_type" class="form-select" required>
+              <option value="pat">Personal Access Token</option>
+              <option value="oauth">OAuth Token</option>
+              <option value="app_token">App Token</option>
+              <option value="ssh_key">SSH Key</option>
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-src-org">Organisation / Group <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+          <input id="edit-src-org" name="org_or_group" class="form-input" type="text"
+                 placeholder="e.g. my-org">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-src-token">Access Token <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(leave blank to keep existing)</span></label>
+          <input id="edit-src-token" name="auth_credential" class="form-input" type="password"
+                 placeholder="Leave blank to keep existing token"
+                 oninput="invalidateSourceTest('edit')">
+        </div>
+        <div class="form-group">
+          <label class="form-label" for="edit-src-baseurl">API URL</label>
+          <input id="edit-src-baseurl" name="base_url" class="form-input" type="text"
+                 placeholder="https://api.github.com" required>
+        </div>
+        <!-- Connection test for edit (required when token changes) -->
+        <div class="form-group" style="margin-bottom:0" id="edit-src-test-row" style="display:none">
+          <div style="display:flex;align-items:center;gap:10px">
+            <button type="button" id="btn-edit-src-test" class="btn btn-ghost btn-sm" style="display:none"
+              onclick="runEditSourceTest()">
+              <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:13px;height:13px">
+                <path d="M2 8h2l2-4 3 8 2-4h3"/>
+              </svg>
+              Test New Token
+            </button>
+            <span id="edit-src-test-result" style="font-size:12px"></span>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-edit-source')">Cancel</button>
+        <button id="btn-edit-source-submit" type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script src="https://unpkg.com/htmx-ext-json-enc@2.0.1/json-enc.js"></script>
+<script>
+const forgeBaseUrls = {
+  github:       'https://api.github.com',
+  gitlab:       'https://gitlab.com',
+  azure_devops: 'https://dev.azure.com',
+  bitbucket:    'https://api.bitbucket.org/2.0',
+  generic:      '',
+};
+
+function updateSourceDefaults(forgeType) {
+  const urlInput = document.getElementById('src-baseurl');
+  urlInput.value = forgeBaseUrls[forgeType] || '';
+}
+
+// Pre-fill on page load for the default selection
+document.addEventListener('DOMContentLoaded', () => {
+  const sel = document.getElementById('src-type');
+  if (sel) updateSourceDefaults(sel.value);
+});
+
+function openCreateSourceModal() {
+  document.getElementById('btn-create-source-submit').disabled = true;
+  document.getElementById('src-test-result').innerHTML = '';
+  openModal('modal-create-source');
+}
+
+function invalidateSourceTest(form) {
+  if (form === 'create') {
+    document.getElementById('btn-create-source-submit').disabled = true;
+    document.getElementById('src-test-result').innerHTML = '';
+  } else {
+    // Edit: only block save when a new token has been entered
+    const tokenVal = document.getElementById('edit-src-token').value;
+    const btn = document.getElementById('btn-edit-source-submit');
+    const testBtn = document.getElementById('btn-edit-src-test');
+    document.getElementById('edit-src-test-result').innerHTML = '';
+    if (tokenVal) {
+      btn.disabled = true;
+      testBtn.style.display = '';
+    } else {
+      btn.disabled = false;
+      testBtn.style.display = 'none';
+    }
+  }
+}
+
+function handleSourceTestResult(event) {
+  const span = document.getElementById('src-test-result');
+  if (event.detail.xhr.status === 200) {
+    const data = JSON.parse(event.detail.xhr.responseText);
+    span.innerHTML = '<span class="badge badge-success">✓ ' + data.message + '</span>';
+    document.getElementById('btn-create-source-submit').disabled = false;
+  } else {
+    let msg = 'Connection failed';
+    try { msg = JSON.parse(event.detail.xhr.responseText).detail || msg; } catch {}
+    span.innerHTML = '<span class="badge badge-failed">✗ ' + msg + '</span>';
+    document.getElementById('btn-create-source-submit').disabled = true;
+  }
+}
+
+async function runEditSourceTest() {
+  const sourceId = document.getElementById('edit-src-id').value;
+  const token = document.getElementById('edit-src-token').value;
+  const forgeType = document.getElementById('edit-src-type').value;
+  const baseUrl = document.getElementById('edit-src-baseurl').value;
+  const org = document.getElementById('edit-src-org').value || null;
+  const span = document.getElementById('edit-src-test-result');
+  span.innerHTML = '<span style="color:var(--muted);font-size:12px">Testing…</span>';
+  try {
+    const resp = await fetch('/api/v1/sources/' + sourceId + '/test-connection', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({forge_type: forgeType, base_url: baseUrl, auth_credential: token, org_or_group: org}),
+    });
+    if (resp.ok) {
+      const data = await resp.json();
+      span.innerHTML = '<span class="badge badge-success">✓ ' + data.message + '</span>';
+      document.getElementById('btn-edit-source-submit').disabled = false;
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      span.innerHTML = '<span class="badge badge-failed">✗ ' + (err.detail || 'Connection failed') + '</span>';
+    }
+  } catch {
+    span.innerHTML = '<span class="badge badge-failed">✗ Network error</span>';
+  }
+}
+
+function openEditSourceModal(id, name, forgeType, authType, org, baseUrl) {
+  document.getElementById('edit-src-id').value = id;
+  document.getElementById('edit-src-name').value = name;
+  document.getElementById('edit-src-type').value = forgeType;
+  document.getElementById('edit-src-auth-type').value = authType;
+  document.getElementById('edit-src-org').value = org;
+  document.getElementById('edit-src-baseurl').value = baseUrl;
+  document.getElementById('edit-src-token').value = '';
+  document.getElementById('edit-src-test-result').innerHTML = '';
+  document.getElementById('btn-edit-src-test').style.display = 'none';
+  document.getElementById('btn-edit-source-submit').disabled = false;
+  openModal('modal-edit-source');
+}
+
+document.getElementById('form-edit-source').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const id = document.getElementById('edit-src-id').value;
+  const body = {
+    name:           document.getElementById('edit-src-name').value,
+    forge_type:     document.getElementById('edit-src-type').value,
+    auth_type:      document.getElementById('edit-src-auth-type').value,
+    org_or_group:   document.getElementById('edit-src-org').value || null,
+    base_url:       document.getElementById('edit-src-baseurl').value,
+  };
+  const token = document.getElementById('edit-src-token').value;
+  if (token) body.auth_credential = token;
+  try {
+    const resp = await fetch('/api/v1/sources/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (resp.ok) {
+      showToast('Source updated', 'ok');
+      closeModal('modal-edit-source');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || 'Update failed', 'err');
+    }
+  } catch {
+    showToast('Network error', 'err');
+  }
+});
+</script>
+{% endblock %}

@@ -1,0 +1,178 @@
+{% extends "base.html" %}
+{% block title %}{{ source.name }} — Sources — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">
+      <a href="/sources" style="color:var(--muted)">Sources</a>
+      <span style="margin: 0 6px">›</span>
+      <span>{{ source.name }}</span>
+    </div>
+    <h1 class="page-title">{{ source.name }}</h1>
+    <p class="page-sub mono">
+      {% if source.forge_type == 'github' %}
+        <span class="chip chip-mint">github</span>
+      {% elif source.forge_type == 'gitlab' %}
+        <span class="chip chip-amber">gitlab</span>
+      {% elif source.forge_type == 'azure_devops' %}
+        <span class="chip chip-sky">azure</span>
+      {% else %}
+        <span class="chip">{{ source.forge_type }}</span>
+      {% endif %}
+      {% if source.org_or_group %}
+        &nbsp;{{ source.org_or_group }}
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-ghost btn-sm" id="btn-test-conn"
+      hx-post="/api/v1/sources/{{ source.id }}/test-connection"
+      hx-swap="none"
+      hx-on::after-request="handleTestResult(event)">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M2 8h2l2-4 3 8 2-4h3"/>
+      </svg>
+      Test Connection
+    </button>
+    <button id="btn-discover" class="btn btn-ghost btn-sm"
+      hx-post="/api/v1/sources/{{ source.id }}/discover"
+      hx-confirm="Scan '{{ source.name }}' for repositories now?"
+      hx-on::before-request="startDiscover()"
+      hx-on::after-request="handleDiscoverResult(event)">
+      <svg id="btn-discover-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="8" cy="8" r="6"/>
+        <path d="M8 5v3l2 2"/>
+      </svg>
+      <svg id="btn-discover-spinner" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="display:none;animation:spin 1s linear infinite">
+        <path d="M8 2a6 6 0 0 1 6 6" stroke-linecap="round"/>
+      </svg>
+      <span id="btn-discover-label">Discover Repos</span>
+    </button>
+    <button class="btn btn-danger btn-sm"
+      hx-delete="/api/v1/sources/{{ source.id }}"
+      data-confirm="Delete '{{ source.name }}'? This removes all its repositories permanently."
+      hx-on::after-request="if(event.detail.successful){window.location.href='/sources'}">
+      Delete Source
+    </button>
+  </div>
+</div>
+
+<!-- Inline feedback bar -->
+<div id="source-feedback" style="display:none;padding:8px 0 0 0"></div>
+
+<div class="page-body">
+  <div class="col-2" style="grid-template-columns: 1fr 1fr; align-items: start;">
+
+    <!-- Connection details -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Connection</span></div>
+      <div class="card-body" style="padding: 0 20px;">
+        <div class="kv-list">
+          <div class="kv-row">
+            <span class="kv-key">ID</span>
+            <span class="kv-val mono" style="font-size:10px">{{ source.id }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Forge</span>
+            <span class="kv-val">{{ source.forge_type | forge_label }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Organisation</span>
+            <span class="kv-val mono">{{ source.org_or_group or '—' }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">API URL</span>
+            <span class="kv-val mono" style="font-size:11px;word-break:break-all">{{ source.base_url or 'default' }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Auth Type</span>
+            <span class="kv-val">{{ source.auth_type }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Credential</span>
+            <span class="kv-val" style="color:var(--muted)">● ● ● encrypted ● ● ●</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">SSL Verify</span>
+            <span class="kv-val">{{ 'Yes' if source.verify_ssl else 'No' }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Repository cache stats -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Repository Cache</span></div>
+      <div class="card-body" style="padding: 0 20px;">
+        <div class="kv-list">
+          <div class="kv-row">
+            <span class="kv-key">Cached repos</span>
+            <span class="kv-val mono">{{ repo_count }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Created</span>
+            <span class="kv-val mono" style="font-size:11px">{{ source.created_at.strftime('%Y-%m-%d %H:%M') if source.created_at else '—' }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Updated</span>
+            <span class="kv-val mono" style="font-size:11px">{{ source.updated_at.strftime('%Y-%m-%d %H:%M') if source.updated_at else '—' }}</span>
+          </div>
+        </div>
+        <div style="padding: 16px 0 12px 0; font-size: 12px; color: var(--muted); line-height: 1.5">
+          Use <b>Discover Repos</b> to scan this forge and update the cache.
+          Repositories are selected per-job using the job create / edit form.
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+function handleTestResult(event) {
+  const bar = document.getElementById('source-feedback');
+  bar.style.display = 'block';
+  if (event.detail.xhr.status === 200) {
+    const data = JSON.parse(event.detail.xhr.responseText);
+    bar.innerHTML = '<span class="badge badge-success" style="font-size:12px">✓ ' + data.message + '</span>';
+  } else {
+    let msg = 'Connection failed';
+    try { msg = JSON.parse(event.detail.xhr.responseText).detail || msg; } catch {}
+    bar.innerHTML = '<span class="badge badge-failed" style="font-size:12px">✗ ' + msg + '</span>';
+  }
+}
+
+function startDiscover() {
+  const btn = document.getElementById('btn-discover');
+  btn.disabled = true;
+  document.getElementById('btn-discover-icon').style.display = 'none';
+  document.getElementById('btn-discover-spinner').style.display = 'inline';
+  document.getElementById('btn-discover-label').textContent = 'Discovering…';
+  const bar = document.getElementById('source-feedback');
+  bar.style.display = 'block';
+  bar.innerHTML = '<span class="badge" style="font-size:12px;background:var(--surface2);color:var(--fg)">⏳ Scanning forge for repositories…</span>';
+}
+
+function handleDiscoverResult(event) {
+  const btn = document.getElementById('btn-discover');
+  btn.disabled = false;
+  document.getElementById('btn-discover-icon').style.display = 'inline';
+  document.getElementById('btn-discover-spinner').style.display = 'none';
+  document.getElementById('btn-discover-label').textContent = 'Discover Repos';
+  const bar = document.getElementById('source-feedback');
+  bar.style.display = 'block';
+  if (event.detail.xhr.status === 200) {
+    const repos = JSON.parse(event.detail.xhr.responseText);
+    bar.innerHTML = '<span class="badge badge-success" style="font-size:12px">✓ Discovery complete — ' + repos.length + ' repo(s) cached. Refreshing…</span>';
+    setTimeout(() => location.reload(), 1500);
+  } else {
+    let msg = 'Discovery failed';
+    try { msg = JSON.parse(event.detail.xhr.responseText).detail || msg; } catch {}
+    bar.innerHTML = '<span class="badge badge-failed" style="font-size:12px">✗ ' + msg + '</span>';
+  }
+}
+</script>
+{% endblock %}

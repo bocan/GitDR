@@ -1,0 +1,281 @@
+{% extends "base.html" %}
+{% block title %}Destinations — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Destinations</h1>
+    <p class="page-sub">Where backups are stored</p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-primary" onclick="openModal('modal-create-dest')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
+      </svg>
+      Add Destination
+    </button>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="card">
+    {% if destinations %}
+    <div class="table-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Name</th>
+            <th>Type</th>
+            <th>Created</th>
+            <th class="col-compact"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for dest in destinations %}
+          <tr>
+            <td>
+              <span style="font-weight:500">{{ dest.name }}</span>
+              <div class="mono text-muted" style="font-size:10px">{{ dest.id }}</div>
+            </td>
+            <td>
+              {% if dest.dest_type == 's3' %}
+                <span class="chip chip-amber">S3</span>
+              {% elif dest.dest_type == 'gcs' %}
+                <span class="chip chip-sky">GCS</span>
+              {% elif dest.dest_type == 'azure_blob' %}
+                <span class="chip chip-sky">Azure</span>
+              {% elif dest.dest_type == 'local' %}
+                <span class="chip chip-mint">Local</span>
+              {% else %}
+                <span class="chip">{{ dest.dest_type }}</span>
+              {% endif %}
+            </td>
+            <td class="mono text-muted" style="font-size:11px">
+              {{ dest.created_at.strftime('%Y-%m-%d') if dest.created_at else '—' }}
+            </td>
+            <td class="col-compact">
+              <div class="flex gap-2">
+                <button class="btn btn-ghost btn-sm"
+                  onclick="openEditDestModal('{{ dest.id }}','{{ dest.name }}')">
+                  Edit
+                </button>
+                <button class="btn btn-ghost btn-sm"
+                  hx-post="/api/v1/destinations/{{ dest.id }}/test"
+                  hx-on::after-request="if(event.detail.successful){showToast('Connection OK ✓','ok')}else{showToast('Connection failed','err')}">
+                  Test
+                </button>
+                <button class="btn btn-danger btn-sm"
+                  hx-delete="/api/v1/destinations/{{ dest.id }}"
+                  data-confirm="Delete destination '{{ dest.name }}'?"
+                  hx-on::after-request="reloadOnSuccess(event)">
+                  Delete
+                </button>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <svg class="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M6 30 L24 10 L42 30"/>
+        <rect x="14" y="30" width="20" height="12" rx="1"/>
+      </svg>
+      <div class="empty-title">No destinations configured</div>
+      <div class="empty-sub">Add a local path, S3 bucket, or other storage backend to receive backups.</div>
+      <button class="btn btn-primary" onclick="openModal('modal-create-dest')">Add your first destination</button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── CREATE DESTINATION MODAL ──────────────────────────── -->
+<div id="modal-create-dest" class="modal-bg">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Add Destination</span>
+      <button class="btn-icon" onclick="closeModal('modal-create-dest')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-create-dest">
+      <div class="modal-body">
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label" for="dest-name">Name</label>
+            <input id="dest-name" name="name" class="form-input" type="text" required
+                   placeholder="e.g. Primary S3 Bucket">
+          </div>
+          <div class="form-group">
+            <label class="form-label" for="dest-type">Storage Type</label>
+            <select id="dest-type" name="dest_type" class="form-select" required
+                    onchange="updateDestFields(this.value)">
+              <option value="local">Local filesystem</option>
+              <option value="s3">AWS S3</option>
+              <option value="gcs">Google Cloud Storage</option>
+              <option value="azure_blob">Azure Blob Storage</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- Dynamic config fields injected here -->
+        <div id="dest-config-fields">
+          <!-- Local filesystem (default) -->
+          <div class="form-group">
+            <label class="form-label" for="cfg-path">Backup Path</label>
+            <input id="cfg-path" name="config_path" class="form-input" type="text"
+                   placeholder="/var/backups/gitdr">
+            <p class="form-hint">Absolute path where archives will be stored.</p>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-create-dest')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Destination</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── EDIT DESTINATION MODAL ────────────────────────────── -->
+<div id="modal-edit-dest" class="modal-bg">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Edit Destination</span>
+      <button class="btn-icon" onclick="closeModal('modal-edit-dest')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-edit-dest">
+      <input type="hidden" id="edit-dest-id">
+      <div class="modal-body">
+        <div class="form-group" style="margin-bottom:0">
+          <label class="form-label" for="edit-dest-name">Name</label>
+          <input id="edit-dest-name" name="name" class="form-input" type="text" required
+                 placeholder="e.g. Primary S3 Bucket">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-edit-dest')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+const destFieldTemplates = {
+  local: `
+    <div class="form-group">
+      <label class="form-label" for="cfg-path">Backup Path</label>
+      <input id="cfg-path" name="config_path" class="form-input" type="text" placeholder="/var/backups/gitdr">
+      <p class="form-hint">Absolute path where archives will be stored.</p>
+    </div>`,
+  s3: `
+    <div class="form-row">
+      <div class="form-group">
+        <label class="form-label">Bucket</label>
+        <input name="config_bucket" class="form-input" type="text" placeholder="my-backup-bucket">
+      </div>
+      <div class="form-group">
+        <label class="form-label">Region</label>
+        <input name="config_region" class="form-input" type="text" placeholder="us-east-1">
+      </div>
+    </div>
+    <div class="form-group">
+      <label class="form-label">Prefix (optional)</label>
+      <input name="config_prefix" class="form-input" type="text" placeholder="gitdr/">
+    </div>`,
+  gcs: `
+    <div class="form-group">
+      <label class="form-label">Bucket</label>
+      <input name="config_bucket" class="form-input" type="text" placeholder="my-gcs-bucket">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Prefix (optional)</label>
+      <input name="config_prefix" class="form-input" type="text" placeholder="gitdr/">
+    </div>`,
+  azure_blob: `
+    <div class="form-group">
+      <label class="form-label">Container</label>
+      <input name="config_container" class="form-input" type="text" placeholder="gitdr-backups">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Account URL</label>
+      <input name="config_account_url" class="form-input" type="url" placeholder="https://....blob.core.windows.net">
+    </div>`,
+};
+
+function updateDestFields(type) {
+  document.getElementById('dest-config-fields').innerHTML = destFieldTemplates[type] || '';
+}
+
+document.getElementById('form-create-dest').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const destType = document.getElementById('dest-type').value;
+  const config = {};
+  this.querySelectorAll('[name^="config_"]').forEach(el => {
+    if (el.value) config[el.name.replace('config_', '')] = el.value;
+  });
+  const body = {
+    name: document.getElementById('dest-name').value,
+    dest_type: destType,
+    config: config,
+  };
+  try {
+    const resp = await fetch('/api/v1/destinations/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (resp.ok) {
+      showToast('Destination created', 'ok');
+      closeModal('modal-create-dest');
+      setTimeout(() => location.reload(), 400);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || 'Request failed', 'err');
+    }
+  } catch {
+    showToast('Network error', 'err');
+  }
+});
+function openEditDestModal(id, name) {
+  document.getElementById('edit-dest-id').value = id;
+  document.getElementById('edit-dest-name').value = name;
+  openModal('modal-edit-dest');
+}
+
+document.getElementById('form-edit-dest').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const id = document.getElementById('edit-dest-id').value;
+  const body = { name: document.getElementById('edit-dest-name').value };
+  try {
+    const resp = await fetch('/api/v1/destinations/' + id, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (resp.ok) {
+      showToast('Destination updated', 'ok');
+      closeModal('modal-edit-dest');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || 'Update failed', 'err');
+    }
+  } catch {
+    showToast('Network error', 'err');
+  }
+});
+</script>
+{% endblock %}

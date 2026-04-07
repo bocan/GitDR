@@ -1,0 +1,161 @@
+{% extends "base.html" %}
+{% block title %}{{ job.name }} — Jobs — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">
+      <a href="/jobs" style="color:var(--muted)">Jobs</a>
+      <span style="margin: 0 6px">›</span>
+      <span>{{ job.name }}</span>
+    </div>
+    <h1 class="page-title">{{ job.name }}</h1>
+    <p class="page-sub">
+      {% if job.enabled %}
+        <span class="badge badge-success">enabled</span>
+      {% else %}
+        <span class="badge badge-pending">disabled</span>
+      {% endif %}
+      {% if job.schedule_cron %}
+        <span class="mono text-muted" style="font-size:11px;margin-left:8px">{{ job.schedule_cron }}</span>
+      {% endif %}
+    </p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-ghost btn-sm"
+      hx-post="/api/v1/jobs/{{ job.id }}/run"
+      hx-on::after-request="reloadOnSuccess(event)">
+      <svg viewBox="0 0 16 16" fill="currentColor" style="width:12px;height:12px">
+        <polygon points="3,2 13,8 3,14"/>
+      </svg>
+      Run Now
+    </button>
+    <button class="btn btn-danger btn-sm"
+      hx-delete="/api/v1/jobs/{{ job.id }}"
+      data-confirm="Delete job '{{ job.name }}'? This will not remove existing run records."
+      hx-on::after-request="if(event.detail.successful){window.location.href='/jobs'}">
+      Delete Job
+    </button>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="col-2" style="grid-template-columns: 1fr 2fr; align-items: start;">
+
+    <!-- Job configuration -->
+    <div class="card">
+      <div class="card-header"><span class="card-title">Configuration</span></div>
+      <div class="card-body" style="padding: 0 20px;">
+        <div class="kv-list">
+          <div class="kv-row">
+            <span class="kv-key">ID</span>
+            <span class="kv-val mono" style="font-size:10px">{{ job.id }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Source</span>
+            <span class="kv-val">
+              {% if source %}
+              <a href="/sources/{{ source.id }}" style="transition:color .1s"
+                 onmouseenter="this.style.color='var(--mint)'" onmouseleave="this.style.color=''">
+                {{ source.name }}
+              </a>
+              {% else %}—{% endif %}
+            </span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Destination</span>
+            <span class="kv-val">{{ dest.name if dest else '—' }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Schedule</span>
+            <span class="kv-val mono" style="font-size:11px">{{ job.schedule_cron or 'manual only' }}</span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Branch Filter</span>
+            <span class="kv-val">
+              {% if job.branch_filter %}
+                {% for b in job.branch_filter %}
+                <span class="chip chip-mint" style="margin:1px">{{ b }}</span>
+                {% endfor %}
+              {% else %}
+              <span class="text-muted">all branches</span>
+              {% endif %}
+            </span>
+          </div>
+          <div class="kv-row">
+            <span class="kv-key">Created</span>
+            <span class="kv-val mono" style="font-size:11px">
+              {{ job.created_at.strftime('%Y-%m-%d %H:%M') if job.created_at else '—' }}
+            </span>
+          </div>
+        </div>
+      </div>
+      <div style="padding: 16px 20px;">
+        <label class="toggle-label">
+          <span class="toggle">
+            <input type="checkbox" {% if job.enabled %}checked{% endif %}
+              hx-patch="/api/v1/jobs/{{ job.id }}"
+              hx-vals='{"enabled": {% if job.enabled %}false{% else %}true{% endif %}}'
+              hx-swap="none"
+              hx-on::after-request="reloadOnSuccess(event)">
+            <span class="toggle-track"></span>
+            <span class="toggle-thumb"></span>
+          </span>
+          <span>Job {% if job.enabled %}enabled{% else %}disabled{% endif %}</span>
+        </label>
+      </div>
+    </div>
+
+    <!-- Run history -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Run History</span>
+        <span class="mono text-muted" style="font-size:11px">{{ runs|length }} run{{ 's' if runs|length != 1 else '' }}</span>
+      </div>
+      {% if runs %}
+      <div class="table-wrap">
+        <table class="dt">
+          <thead>
+            <tr>
+              <th>Repository</th>
+              <th>Status</th>
+              <th class="text-right">Size</th>
+              <th class="text-right">Duration</th>
+              <th class="text-right">Completed</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for run in runs %}
+            <tr onclick="location.href='/runs/{{ run.id }}'" style="cursor:pointer">
+              <td>
+                {% set repo = repo_map.get(run.repo_id) %}
+                <span class="truncate" style="max-width:200px">{{ repo.full_name if repo else '—' }}</span>
+              </td>
+              <td>
+                <span class="badge badge-{{ run.status }}">{{ run.status }}</span>
+              </td>
+              <td class="text-right mono muted">{{ run.size_bytes|humanize_bytes if run.size_bytes else '—' }}</td>
+              <td class="text-right mono muted">{{ run.duration_secs|format_duration if run.duration_secs else '—' }}</td>
+              <td class="text-right mono muted" style="font-size:10px;white-space:nowrap">
+                {{ run.completed_at.strftime('%Y-%m-%d %H:%M') if run.completed_at else '—' }}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty">
+        <svg class="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="8" y="8" width="32" height="32" rx="4"/>
+          <path d="M16 24h16M24 16v16"/>
+        </svg>
+        <div class="empty-title">No runs yet</div>
+        <div class="empty-sub">Click <b>Run Now</b> to trigger the first backup for this job.</div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+</div>
+{% endblock %}

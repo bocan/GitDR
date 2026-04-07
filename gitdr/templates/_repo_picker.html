@@ -1,0 +1,21 @@
+{% if repos %}
+<div style="border:1px solid var(--border);border-radius:6px;max-height:200px;overflow-y:auto">
+  {% for repo in repos %}
+  <label style="display:flex;align-items:center;gap:10px;padding:6px 10px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--border);transition:background .1s"
+         onmouseenter="this.style.background='var(--surface-2)'" onmouseleave="this.style.background=''">
+    <input type="checkbox" name="included_repos" value="{{ repo.repo_name }}"
+           style="accent-color:var(--mint);width:14px;height:14px;flex-shrink:0">
+    <span class="mono" style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ repo.repo_name }}</span>
+    {% if repo.is_archived %}
+    <span class="chip" style="font-size:9px;color:var(--muted)">archived</span>
+    {% endif %}
+  </label>
+  {% endfor %}
+</div>
+<p class="form-hint" style="margin-top:6px">Leave all unchecked to back up <b>every</b> repo from this source.</p>
+{% else %}
+<div style="padding:10px 0;font-size:12px;color:var(--muted)">
+  No cached repositories for this source.
+  <a href="#" onclick="return false" style="color:var(--mint)">Discover repos from the source page first.</a>
+</div>
+{% endif %}

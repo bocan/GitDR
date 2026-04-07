@@ -1,0 +1,27 @@
+services:
+  gitdr:
+    build: .
+    ports:
+      - "8420:8420"
+    volumes:
+      - gitdr-data:/app/data
+      # Uncomment to mount a local backup destination (local storage backend)
+      # - /path/to/local/backups:/backups
+      # Uncomment to access restored repositories from the host machine.
+      # Restored repos land in GITDR_TEMP_DIR/restores/ (default: /app/data/tmp/restores/).
+      # After a restore you can clone or inspect the repo directly from this host path.
+      # - /path/to/host/restores:/app/data/tmp/restores
+    environment:
+      # Set GITDR_DB_PASSPHRASE in a .env file or in your shell environment.
+      # Never hard-code it here.
+      - GITDR_DB_PASSPHRASE=${GITDR_DB_PASSPHRASE}
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8420/api/v1/system/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  gitdr-data:

@@ -1,0 +1,101 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  # ------------------------------------------------------------------
+  # Unit tests - no SQLCipher required, fast feedback on every push
+  # ------------------------------------------------------------------
+  unit:
+    name: Unit tests (Python ${{ matrix.python-version }})
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.14"]
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install dev dependencies (no SQLCipher)
+        run: uv sync --extra dev
+
+      - name: Run unit tests
+        run: uv run pytest tests/unit/ -v
+        env:
+          GITDR_DB_PASSPHRASE: testpassphrase
+
+  # ------------------------------------------------------------------
+  # Full test suite - installs libsqlcipher-dev, runs all tests with
+  # coverage enforcement
+  # ------------------------------------------------------------------
+  full:
+    name: Full test suite + coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install system dependencies (SQLCipher)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            libsqlcipher-dev libsqlcipher0 gcc
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install all dependencies (including SQLCipher extra)
+        run: uv sync --all-extras
+
+      - name: Run full test suite with coverage
+        run: uv run pytest tests/ -v --cov=gitdr --cov-report=term-missing --cov-fail-under=80
+        env:
+          GITDR_DB_PASSPHRASE: testpassphrase
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: .coverage
+
+  # ------------------------------------------------------------------
+  # Lint and type checks
+  # ------------------------------------------------------------------
+  lint:
+    name: Lint + type check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Set up Python
+        run: uv python install 3.14
+
+      - name: Install dev dependencies
+        run: uv sync --extra dev
+
+      - name: Ruff lint
+        run: uv run ruff check gitdr/ tests/
+
+      - name: Ruff format check
+        run: uv run ruff format --check gitdr/ tests/
+
+      - name: Mypy
+        run: uv run mypy gitdr/

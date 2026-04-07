@@ -1,0 +1,444 @@
+{% extends "base.html" %}
+{% block title %}Jobs — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Backup Jobs</h1>
+    <p class="page-sub">Scheduled operations that archive repositories</p>
+  </div>
+  <div class="page-actions">
+    <button class="btn btn-primary" onclick="openModal('modal-create-job')">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+        <line x1="8" y1="3" x2="8" y2="13"/><line x1="3" y1="8" x2="13" y2="8"/>
+      </svg>
+      Create Job
+    </button>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="card">
+    {% if jobs %}
+    <div class="table-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th>Job Name</th>
+            <th>Source</th>
+            <th>Destination</th>
+            <th>Schedule</th>
+            <th>Last Run</th>
+            <th class="text-center">Enabled</th>
+            <th class="col-compact"></th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for job in jobs %}
+          {% set last = last_run.get(job.id) %}
+          <tr>
+            <td>
+              <a href="/jobs/{{ job.id }}"
+                 style="font-weight:500; transition:color .1s"
+                 onmouseenter="this.style.color='var(--mint)'" onmouseleave="this.style.color=''">
+                {{ job.name }}
+              </a>
+            </td>
+            <td>
+              {% set src = source_map.get(job.source_id) %}
+              {% if src %}
+              <div style="font-size:13px">{{ src.name }}</div>
+              <div class="mono text-muted" style="font-size:10px">{{ src.forge_type }}</div>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% set dest = dest_map.get(job.destination_id) %}
+              {% if dest %}
+              <div style="font-size:13px">{{ dest.name }}</div>
+              <div class="mono text-muted" style="font-size:10px">{{ dest.dest_type }}</div>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if job.schedule_cron %}
+              <span class="mono" style="font-size:11px">{{ job.schedule_cron }}</span>
+              {% else %}
+              <span class="text-muted" style="font-size:11px">manual only</span>
+              {% endif %}
+            </td>
+            <td>
+              {% if last %}
+              <span class="badge badge-{{ last.status }}">{{ last.status }}</span>
+              <div class="mono text-muted" style="font-size:10px;margin-top:3px">
+                {{ last.completed_at|relative_time if last.completed_at else last.started_at|relative_time }}
+              </div>
+              {% else %}
+              <span class="text-muted" style="font-size:12px">never run</span>
+              {% endif %}
+            </td>
+            <td class="text-center col-compact">
+              <label class="toggle-label" style="justify-content:center">
+                <span class="toggle">
+                  <input type="checkbox" {% if job.enabled %}checked{% endif %}
+                    hx-patch="/api/v1/jobs/{{ job.id }}"
+                    hx-vals='{"enabled": {% if job.enabled %}false{% else %}true{% endif %}}'
+                    hx-swap="none"
+                    hx-on::after-request="reloadOnSuccess(event)">
+                  <span class="toggle-track"></span>
+                  <span class="toggle-thumb"></span>
+                </span>
+              </label>
+            </td>
+            <td class="col-compact">
+              <div class="flex gap-2">
+                <a href="/jobs/{{ job.id }}" class="btn btn-ghost btn-sm">View</a>
+                <button class="btn btn-ghost btn-sm"
+                  onclick="openEditModal('{{ job.id }}','{{ job.name }}','{{ job.source_id }}','{{ job.destination_id }}','{{ job.schedule_cron or '' }}','{{ job.included_repos or '' }}','{{ job.enabled|lower }}')"
+                  title="Edit job">Edit</button>
+                <button class="btn btn-ghost btn-sm"
+                  hx-post="/api/v1/jobs/{{ job.id }}/run"
+                  hx-on::after-request="reloadOnSuccess(event)"
+                  title="Trigger manual run">
+                  <svg viewBox="0 0 16 16" fill="currentColor">
+                    <polygon points="4,2 14,8 4,14"/>
+                  </svg>
+                </button>
+                <button class="btn btn-danger btn-sm"
+                  hx-delete="/api/v1/jobs/{{ job.id }}"
+                  data-confirm="Delete job '{{ job.name }}'?"
+                  hx-on::after-request="reloadOnSuccess(event)">
+                  ✕
+                </button>
+              </div>
+            </td>
+          </tr>
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <svg class="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <polyline points="4,24 12,24 18,8 30,40 36,24 44,24"/>
+      </svg>
+      <div class="empty-title">No backup jobs</div>
+      <div class="empty-sub">Create a job to start scheduling automatic repository backups.</div>
+      <button class="btn btn-primary" onclick="openModal('modal-create-job')">Create first job</button>
+    </div>
+    {% endif %}
+  </div>
+</div>
+
+<!-- ── CREATE JOB MODAL ──────────────────────────────────── -->
+<div id="modal-create-job" class="modal-bg">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Create Backup Job</span>
+      <button class="btn-icon" onclick="closeModal('modal-create-job')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-create-job">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Job Name</label>
+          <input name="name" class="form-input" type="text" required placeholder="e.g. Nightly GitHub backup">
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Source</label>
+            <select name="source_id" class="form-select" required id="create-job-source"
+                    onchange="loadRepoPicker(this.value)">
+              <option value="">— select source —</option>
+              {% for src_id, src in source_map.items() %}
+              <option value="{{ src_id }}">{{ src.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Destination</label>
+            <select name="destination_id" class="form-select" required>
+              <option value="">— select destination —</option>
+              {% for dest_id, dest in dest_map.items() %}
+              <option value="{{ dest_id }}">{{ dest.name }}</option>
+              {% endfor %}
+            </select>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            Included Repositories
+            <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span>
+          </label>
+          <div id="repo-picker-area" style="min-height:36px">
+            <p class="form-hint" style="margin:0">Select a source above to load available repositories.</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cron Schedule <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+          <input name="schedule_cron" class="form-input" type="text"
+                 placeholder="0 2 * * *  (daily at 2am)">
+          <p class="form-hint">Standard cron expression. Leave blank for manual-only jobs.</p>
+        </div>
+        <div class="form-group">
+          <label class="toggle-label">
+            <span class="toggle">
+              <input type="checkbox" name="enabled" value="true" checked>
+              <span class="toggle-track"></span>
+              <span class="toggle-thumb"></span>
+            </span>
+            Enable job immediately
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-create-job')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Create Job</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<!-- ── EDIT JOB MODAL ────────────────────────────────────── -->
+<div id="modal-edit-job" class="modal-bg">
+  <div class="modal" onclick="event.stopPropagation()">
+    <div class="modal-header">
+      <span class="modal-title">Edit Backup Job</span>
+      <button class="btn-icon" onclick="closeModal('modal-edit-job')">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="4" y1="4" x2="12" y2="12"/><line x1="12" y1="4" x2="4" y2="12"/>
+        </svg>
+      </button>
+    </div>
+    <form id="form-edit-job">
+      <input type="hidden" id="edit-job-id">
+      <div class="modal-body">
+        <div class="form-group">
+          <label class="form-label">Job Name</label>
+          <input id="edit-name" class="form-input" type="text" required>
+        </div>
+        <div class="form-row">
+          <div class="form-group">
+            <label class="form-label">Source</label>
+            <select id="edit-source-display" class="form-select" disabled>
+              {% for src_id, src in source_map.items() %}
+              <option value="{{ src_id }}">{{ src.name }}</option>
+              {% endfor %}
+            </select>
+            <p class="form-hint">Source cannot be changed after creation.</p>
+          </div>
+          <div class="form-group">
+            <label class="form-label">Destination</label>
+            <select id="edit-dest-display" class="form-select" disabled>
+              {% for dest_id, dest in dest_map.items() %}
+              <option value="{{ dest_id }}">{{ dest.name }}</option>
+              {% endfor %}
+            </select>
+            <p class="form-hint">Destination cannot be changed after creation.</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">
+            Included Repositories
+            <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional — empty = all repos)</span>
+          </label>
+          <div id="edit-repo-picker-area" style="min-height:36px">
+            <p class="form-hint" style="margin:0">Loading…</p>
+          </div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Cron Schedule <span style="color:var(--muted);font-weight:400;text-transform:none;letter-spacing:0">(optional)</span></label>
+          <input id="edit-schedule" class="form-input" type="text" placeholder="0 2 * * *">
+          <p class="form-hint">Standard cron expression. Leave blank for manual-only jobs.</p>
+        </div>
+        <div class="form-group">
+          <label class="toggle-label">
+            <span class="toggle">
+              <input id="edit-enabled" type="checkbox">
+              <span class="toggle-track"></span>
+              <span class="toggle-thumb"></span>
+            </span>
+            Enabled
+          </label>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button type="button" class="btn btn-ghost" onclick="closeModal('modal-edit-job')">Cancel</button>
+        <button type="submit" class="btn btn-primary">Save Changes</button>
+      </div>
+    </form>
+  </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+// ── Repo picker helpers ────────────────────────────────────────────────
+function selectAllRepos(areaId, checked) {
+  document.getElementById(areaId)
+    .querySelectorAll('input[name="included_repos"]')
+    .forEach(cb => { cb.checked = checked; });
+}
+
+function invertRepos(areaId) {
+  document.getElementById(areaId)
+    .querySelectorAll('input[name="included_repos"]')
+    .forEach(cb => { cb.checked = !cb.checked; });
+}
+
+function getCheckedRepos(areaId) {
+  return Array.from(
+    document.getElementById(areaId).querySelectorAll('input[name="included_repos"]:checked')
+  ).map(cb => cb.value).filter(Boolean);
+}
+
+function renderRepoPicker(areaId, repos, selected, sourceId) {
+  const area = document.getElementById(areaId);
+  if (!repos || !repos.length) {
+    area.innerHTML = '<p class="form-hint" style="margin:0">No repositories found for this source.</p>';
+    return;
+  }
+  const selSet = new Set(selected);
+  // Bulk controls
+  let html = `<div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+    <span style="font-size:12px;color:var(--muted)">${repos.length} repo${repos.length !== 1 ? 's' : ''}</span>
+    <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px"
+            onclick="selectAllRepos('${areaId}', true)">All</button>
+    <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px"
+            onclick="selectAllRepos('${areaId}', false)">None</button>
+    <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px"
+            onclick="invertRepos('${areaId}')">Invert</button>
+    <button type="button" class="btn btn-ghost btn-sm" style="padding:2px 8px;font-size:11px;margin-left:auto"
+            onclick="discoverRepos('${sourceId}','${areaId}',getCheckedRepos('${areaId}'))">&#8635; Refresh</button>
+  </div>
+  <div style="max-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:6px 10px">
+  `;
+  for (const r of repos) {
+    const checked = selSet.has(r.repo_name) ? ' checked' : '';
+    const archived = r.is_archived ? ' <span class="badge badge-muted" style="font-size:10px">archived</span>' : '';
+    html += `<label style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:13px;cursor:pointer">
+      <input type="checkbox" name="included_repos" value="${r.repo_name}"${checked}> ${r.repo_name}${archived}
+    </label>`;
+  }
+  html += `</div>
+  <p class="form-hint" style="margin-top:6px;margin-bottom:0">Leave all unchecked to back up all repos.</p>`;
+  area.innerHTML = html;
+}
+
+async function discoverRepos(sourceId, areaId, selected = []) {
+  const area = document.getElementById(areaId);
+  area.innerHTML = '<p class="form-hint" style="margin:0;color:var(--muted)">Discovering repositories…</p>';
+  try {
+    const resp = await fetch('/api/v1/sources/' + sourceId + '/discover', { method: 'POST' });
+    if (resp.ok) {
+      const repos = await resp.json();
+      renderRepoPicker(areaId, repos, selected, sourceId);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      area.innerHTML = '<p class="form-hint" style="margin:0;color:var(--danger)">' +
+        (err.detail || 'Discovery failed') + '</p>';
+    }
+  } catch {
+    area.innerHTML = '<p class="form-hint" style="margin:0;color:var(--danger)">Network error during discovery.</p>';
+  }
+}
+
+function loadRepoPicker(sourceId) {
+  const area = document.getElementById('repo-picker-area');
+  if (!sourceId) {
+    area.innerHTML = '<p class="form-hint" style="margin:0">Select a source above to load available repositories.</p>';
+    return;
+  }
+  discoverRepos(sourceId, 'repo-picker-area', []);
+}
+
+function openEditModal(jobId, name, sourceId, destId, schedule, includedReposJson, enabled) {
+  document.getElementById('edit-job-id').value = jobId;
+  document.getElementById('edit-name').value = name;
+  document.getElementById('edit-schedule').value = schedule;
+  document.getElementById('edit-enabled').checked = enabled === 'true';
+
+  // Set source/dest dropdowns (display only)
+  const srcSel = document.getElementById('edit-source-display');
+  const destSel = document.getElementById('edit-dest-display');
+  for (const opt of srcSel.options) { if (opt.value === sourceId) { srcSel.value = opt.value; break; } }
+  for (const opt of destSel.options) { if (opt.value === destId) { destSel.value = opt.value; break; } }
+
+  // Discover repos and pre-select current included repos
+  let included = [];
+  try { included = includedReposJson ? JSON.parse(includedReposJson) : []; } catch {}
+  discoverRepos(sourceId, 'edit-repo-picker-area', included);
+
+  openModal('modal-edit-job');
+}
+
+document.getElementById('form-create-job').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const fd = new FormData(this);
+  const scheduleRaw = fd.get('schedule_cron') || '';
+  const includedRepos = fd.getAll('included_repos').filter(Boolean);
+  const body = {
+    name: fd.get('name'),
+    source_id: fd.get('source_id'),
+    destination_id: fd.get('destination_id'),
+    schedule_cron: scheduleRaw.trim() || null,
+    included_repos: includedRepos.length ? includedRepos : null,
+    enabled: fd.get('enabled') === 'true',
+  };
+  try {
+    const resp = await fetch('/api/v1/jobs/', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (resp.ok) {
+      showToast('Job created', 'ok');
+      closeModal('modal-create-job');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || 'Create failed', 'err');
+    }
+  } catch {
+    showToast('Network error', 'err');
+  }
+});
+
+document.getElementById('form-edit-job').addEventListener('submit', async function(e) {
+  e.preventDefault();
+  const jobId = document.getElementById('edit-job-id').value;
+  const scheduleRaw = document.getElementById('edit-schedule').value.trim();
+  const includedRepos = Array.from(
+    document.getElementById('edit-repo-picker-area').querySelectorAll('input[name="included_repos"]:checked')
+  ).map(cb => cb.value).filter(Boolean);
+  const body = {
+    name: document.getElementById('edit-name').value,
+    schedule_cron: scheduleRaw || null,
+    included_repos: includedRepos.length ? includedRepos : null,
+    enabled: document.getElementById('edit-enabled').checked,
+  };
+  try {
+    const resp = await fetch('/api/v1/jobs/' + jobId, {
+      method: 'PUT',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify(body),
+    });
+    if (resp.ok) {
+      showToast('Job updated', 'ok');
+      closeModal('modal-edit-job');
+      setTimeout(() => location.reload(), 1500);
+    } else {
+      const err = await resp.json().catch(() => ({}));
+      showToast(err.detail || 'Update failed', 'err');
+    }
+  } catch {
+    showToast('Network error', 'err');
+  }
+});
+</script>
+{% endblock %}

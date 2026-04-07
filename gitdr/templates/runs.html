@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+{% block title %}Runs — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Run History</h1>
+    <p class="page-sub">Backup runs and restore operations</p>
+  </div>
+</div>
+
+<div class="page-body">
+
+  <!-- Filters -->
+  <form method="get" class="flex gap-2 mb-4 items-center flex-wrap" style="margin-bottom:16px">
+    <select name="status" class="form-select" style="width:auto;min-width:130px" onchange="this.form.submit()">
+      <option value="">All statuses</option>
+      <option value="success"  {% if filter_status == 'success'  %}selected{% endif %}>success</option>
+      <option value="running"  {% if filter_status == 'running'  %}selected{% endif %}>running</option>
+      <option value="failed"   {% if filter_status == 'failed'   %}selected{% endif %}>failed</option>
+      <option value="pending"  {% if filter_status == 'pending'  %}selected{% endif %}>pending</option>
+      <option value="skipped"  {% if filter_status == 'skipped'  %}selected{% endif %}>skipped</option>
+    </select>
+
+    <select name="job_id" class="form-select" style="width:auto;min-width:160px" onchange="this.form.submit()">
+      <option value="">All jobs</option>
+      {% for jid, job in job_map.items() %}
+      <option value="{{ jid }}" {% if filter_job_id == jid|string %}selected{% endif %}>{{ job.name }}</option>
+      {% endfor %}
+    </select>
+
+    {% if filter_status or filter_job_id %}
+    <a href="/runs" class="btn btn-ghost btn-sm">Clear filters</a>
+    {% endif %}
+
+    <span class="text-muted mono ml-auto" style="font-size:11px">{{ rows|length }} result{{ 's' if rows|length != 1 else '' }}</span>
+  </form>
+
+  <div class="card">
+    {% if rows %}
+    <div class="table-wrap">
+      <table class="dt">
+        <thead>
+          <tr>
+            <th style="width:80px">Type</th>
+            <th>Status</th>
+            <th>Repository / Target</th>
+            <th>Job</th>
+            <th class="text-right">Size</th>
+            <th class="text-right">Duration</th>
+            <th class="text-right">Started</th>
+          </tr>
+        </thead>
+        <tbody>
+        {% for row in rows %}
+          {% if row.kind == 'backup' %}
+          {% set run = row.run %}
+          <tr onclick="location.href='/runs/{{ run.id }}'" style="cursor:pointer">
+            <td class="col-compact">
+              <span style="font-size:10px;font-weight:600;letter-spacing:.04em;color:var(--mint);
+                           background:var(--mint-dim);border:1px solid var(--mint-bdr);
+                           border-radius:4px;padding:2px 7px">BACKUP</span>
+            </td>
+            <td class="col-compact">
+              <span class="badge badge-{{ run.status }}">{{ run.status }}</span>
+            </td>
+            <td>
+              {% set repo = repo_map.get(run.repo_id) %}
+              {% if repo %}
+              <div class="truncate" style="max-width:200px">{{ repo.repo_name }}</div>
+              {% else %}
+              <span class="text-muted">—</span>
+              {% endif %}
+            </td>
+            <td>
+              {% set job = job_map.get(run.job_id) %}
+              <span class="truncate" style="max-width:140px">{{ job.name if job else '—' }}</span>
+            </td>
+            <td class="text-right mono muted">{{ run.size_bytes|humanize_bytes if run.size_bytes else '—' }}</td>
+            <td class="text-right mono muted">{{ run.duration_secs|format_duration if run.duration_secs else '—' }}</td>
+            <td class="text-right mono muted" style="font-size:10px;white-space:nowrap">
+              {{ run.started_at.strftime('%Y-%m-%d %H:%M') if run.started_at else '—' }}
+            </td>
+          </tr>
+          {% else %}
+          {# Restore row #}
+          {% set rr = row.rr %}
+          {% set parent_id = row.backup_run_uuid %}
+          <tr onclick="location.href='/runs/{{ parent_id }}#restore-history'" style="cursor:pointer;background:rgba(91,170,255,0.04)">
+            <td class="col-compact">
+              <span style="font-size:10px;font-weight:600;letter-spacing:.04em;color:var(--sky);
+                           background:var(--sky-dim);border:1px solid rgba(91,170,255,0.2);
+                           border-radius:4px;padding:2px 7px">RESTORE</span>
+            </td>
+            <td class="col-compact">
+              <span class="badge badge-{{ rr.status }}">{{ rr.status }}</span>
+            </td>
+            <td>
+              {% if rr.push_url %}
+              <div class="truncate mono" style="max-width:200px;font-size:11px;color:var(--sky)">{{ rr.push_url }}</div>
+              {% elif rr.restore_dir %}
+              <div class="truncate mono" style="max-width:200px;font-size:11px;color:var(--muted)">{{ rr.restore_dir }}</div>
+              {% else %}
+              <span class="text-muted" style="font-size:11px">local restore</span>
+              {% endif %}
+            </td>
+            <td>
+              <span class="mono muted" style="font-size:10px">
+                ↩ <a href="/runs/{{ parent_id }}" style="color:var(--muted)">{{ parent_id|string|truncate(8, end='') if parent_id else '?' }}</a>
+              </span>
+            </td>
+            <td class="text-right mono muted">—</td>
+            <td class="text-right mono muted">
+              {% if rr.started_at and rr.completed_at %}
+                {{ ((rr.completed_at - rr.started_at).total_seconds())|format_duration }}
+              {% else %}—{% endif %}
+            </td>
+            <td class="text-right mono muted" style="font-size:10px;white-space:nowrap">
+              {{ rr.created_at.strftime('%Y-%m-%d %H:%M') if rr.created_at else '—' }}
+            </td>
+          </tr>
+          {% endif %}
+        {% endfor %}
+        </tbody>
+      </table>
+    </div>
+    {% else %}
+    <div class="empty">
+      <svg class="empty-icon" viewBox="0 0 48 48" fill="none" stroke="currentColor" stroke-width="1.5">
+        <rect x="8" y="4" width="32" height="40" rx="3"/>
+        <line x1="16" y1="16" x2="32" y2="16"/>
+        <line x1="16" y1="24" x2="32" y2="24"/>
+        <line x1="16" y1="32" x2="24" y2="32"/>
+      </svg>
+      <div class="empty-title">No runs found</div>
+      <div class="empty-sub">
+        {% if filter_status or filter_job_id %}
+          No runs match the current filters.
+        {% else %}
+          Trigger a backup job to see run history here.
+        {% endif %}
+      </div>
+      {% if filter_status or filter_job_id %}
+      <a href="/runs" class="btn btn-ghost btn-sm">Clear filters</a>
+      {% else %}
+      <a href="/jobs" class="btn btn-ghost btn-sm">Go to Jobs</a>
+      {% endif %}
+    </div>
+    {% endif %}
+  </div>
+</div>
+{% endblock %}

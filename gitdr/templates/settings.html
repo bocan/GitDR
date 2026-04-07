@@ -1,0 +1,193 @@
+{% extends "base.html" %}
+{% block title %}Settings — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <h1 class="page-title">Settings</h1>
+    <p class="page-sub">System configuration and diagnostics</p>
+  </div>
+</div>
+
+<div class="page-body">
+  <div class="col-2" style="align-items: start;">
+
+    <!-- System Stats -->
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">System Overview</span></div>
+        <div class="card-body" style="padding: 0 20px;">
+          <div class="kv-list">
+            <div class="kv-row">
+              <span class="kv-key">Total Sources</span>
+              <span class="kv-val mono">{{ stats.total_sources }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Total Repositories</span>
+              <span class="kv-val mono">{{ stats.total_repos }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Destinations</span>
+              <span class="kv-val mono">{{ stats.total_destinations }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Backup Jobs</span>
+              <span class="kv-val mono">{{ stats.total_jobs }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Total Runs</span>
+              <span class="kv-val mono">{{ stats.total_runs }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Successful</span>
+              <span class="kv-val mono" style="color:var(--mint)">{{ stats.successful_runs }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Failed</span>
+              <span class="kv-val mono" style="color:var(--coral)">{{ stats.failed_runs }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Total Archived</span>
+              <span class="kv-val mono" style="font-size:16px;font-weight:500">{{ stats.total_size_bytes|humanize_bytes }}</span>
+            </div>
+            {% if stats.last_run_at %}
+            <div class="kv-row">
+              <span class="kv-key">Last Backup</span>
+              <span class="kv-val mono" style="font-size:11px">
+                {{ stats.last_run_at.strftime('%Y-%m-%d %H:%M UTC') }}
+              </span>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      <!-- Cache Management -->
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">Mirror Cache</span>
+        </div>
+        <div class="card-body" style="padding: 0 20px;">
+          <div class="kv-list">
+            <div class="kv-row">
+              <span class="kv-key">Cached Repos</span>
+              <span class="kv-val mono">{{ cache_stats.repo_count }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Cache Size</span>
+              <span class="kv-val mono">{{ cache_stats.size_bytes|humanize_bytes }}</span>
+            </div>
+          </div>
+          <div style="margin-top:16px;padding-bottom:16px">
+            <p style="font-size:12px;color:var(--muted);margin-bottom:12px;line-height:1.6">
+              The mirror cache holds bare git clones used to speed up incremental backups. It can be purged
+              safely — repos will be re-cloned on the next backup run.
+            </p>
+            <form method="post" action="/settings/clear-cache"
+                  hx-confirm="Clear the mirror cache? All {{ cache_stats.repo_count }} cached repo(s) will be deleted. They will be re-cloned on the next backup run."
+                  hx-post="/settings/clear-cache">
+              <button type="submit" class="btn btn-ghost btn-sm" style="color:var(--amber);border-color:rgba(255,182,64,.3)">
+                Purge Cache
+              </button>
+            </form>
+          </div>
+        </div>
+      </div>
+      <div class="card mt-4">
+        <div class="card-header"><span class="card-title">API</span></div>
+        <div style="padding: 12px;">
+          <a href="/api/docs" target="_blank" class="btn btn-ghost w-full" style="justify-content:flex-start;margin-bottom:6px">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px">
+              <rect x="1" y="1" width="14" height="14" rx="1"/>
+              <path d="M5 6l-3 2 3 2M11 6l3 2-3 2M9 5l-2 6"/>
+            </svg>
+            Swagger UI ↗
+          </a>
+          <a href="/api/redoc" target="_blank" class="btn btn-ghost w-full" style="justify-content:flex-start">
+            <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" style="width:14px;height:14px">
+              <rect x="2" y="1" width="12" height="14" rx="1"/>
+              <line x1="5" y1="5" x2="11" y2="5"/>
+              <line x1="5" y1="8" x2="11" y2="8"/>
+              <line x1="5" y1="11" x2="8"  y2="11"/>
+            </svg>
+            ReDoc ↗
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security / Encryption -->
+    <div>
+      <div class="card">
+        <div class="card-header">
+          <span class="card-title">Encryption</span>
+          <span class="badge badge-success">active</span>
+        </div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--muted);line-height:1.7;margin-bottom:16px">
+            GitDR uses SQLCipher AES-256 encryption for the database and Fernet symmetric encryption for
+            all credentials and destination configs. The encryption key is derived from your passphrase
+            at startup and never stored on disk.
+          </p>
+
+          <div class="kv-list">
+            <div class="kv-row">
+              <span class="kv-key">Database</span>
+              <span class="kv-val mono" style="color:var(--mint)">SQLCipher AES-256</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Credentials</span>
+              <span class="kv-val mono" style="color:var(--mint)">Fernet (AES-128-CBC)</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Key Derivation</span>
+              <span class="kv-val mono" style="color:var(--mint)">PBKDF2-HMAC-SHA256</span>
+            </div>
+          </div>
+
+          <div style="margin-top:20px;padding:14px;background:var(--amber-dim);border:1px solid rgba(255,182,64,.2);border-radius:var(--radius)">
+            <div style="font-size:11px;font-weight:600;color:var(--amber);margin-bottom:4px">⚠ Passphrase rotation</div>
+            <div style="font-size:12px;color:var(--muted);line-height:1.6">
+              To change your passphrase, stop the service, run <span class="mono" style="font-size:10px;color:var(--amber)">gitdr rotate-key</span>,
+              and restart. This re-encrypts all secrets with the new key.
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Danger zone -->
+      <div class="card mt-4" style="border-color:rgba(255,77,106,.2)">
+        <div class="card-header" style="border-color:rgba(255,77,106,.2)">
+          <span class="card-title" style="color:var(--coral)">Danger Zone</span>
+        </div>
+        <div class="card-body">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:16px;line-height:1.6">
+            These actions are destructive and cannot be undone.
+          </p>
+          <div style="display:flex;flex-direction:column;gap:10px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius)">
+              <div>
+                <div style="font-size:13px;font-weight:500">Purge run history</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">Delete all backup run records (archives are untouched)</div>
+              </div>
+              <form method="post" action="/settings/purge-runs"
+                    hx-confirm="Delete ALL backup run history? This cannot be undone."
+                    hx-post="/settings/purge-runs">
+                <button type="submit" class="btn btn-danger btn-sm">Purge</button>
+              </form>
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;background:var(--s1);border:1px solid var(--b0);border-radius:var(--radius)">
+              <div>
+                <div style="font-size:13px;font-weight:500">Reset database</div>
+                <div style="font-size:11px;color:var(--muted);margin-top:2px">Wipe all sources, jobs, and run history</div>
+              </div>
+              <button class="btn btn-danger btn-sm" disabled title="Coming soon">Reset</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</div>
+{% endblock %}

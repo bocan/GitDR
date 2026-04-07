@@ -1,0 +1,278 @@
+{% extends "base.html" %}
+{% block title %}Run {{ run.id|string|truncate(8, end='') }} — GitDR{% endblock %}
+
+{% block content %}
+<div class="page-header">
+  <div>
+    <div style="font-size:11px; color:var(--muted); margin-bottom:6px;">
+      <a href="/runs" style="color:var(--muted)">Runs</a>
+      <span style="margin: 0 6px">›</span>
+      <span class="mono">{{ run.id|string|truncate(8, end='') }}</span>
+    </div>
+    <h1 class="page-title">
+      <span class="badge badge-{{ run.status }}" style="font-size:14px;padding:5px 12px;margin-right:10px">{{ run.status }}</span>
+      {{ repo.repo_name if repo else 'Unknown repository' }}
+    </h1>
+    <p class="page-sub mono">
+      {{ run.id }}
+    </p>
+  </div>
+  <div class="page-actions">
+    {% if run.status == 'success' %}
+    <button class="btn btn-ghost btn-sm" onclick="document.getElementById('restore-modal').showModal()">
+      <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+        <path d="M13 5H3l3-3M3 11h10l-3 3"/>
+      </svg>
+      Restore
+    </button>
+    {% endif %}
+  </div>
+</div>
+
+<!-- Restore modal -->
+<style>
+  #restore-modal {
+    border: 1px solid var(--b1);
+    border-radius: 10px;
+    background: var(--s1);
+    color: var(--text);
+    padding: 0;
+    min-width: 420px;
+    max-width: 560px;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.6);
+  }
+  #restore-modal::backdrop {
+    background: rgba(0,0,0,0.7);
+  }
+</style>
+
+<dialog id="restore-modal">
+  <form method="dialog" style="display:contents">
+    <div style="padding:20px 24px 0">
+      <h2 style="margin:0 0 6px;font-size:16px;font-weight:600">Restore Backup</h2>
+      <p style="margin:0 0 16px;font-size:13px;color:var(--muted);line-height:1.55">
+        The archive will be downloaded and reconstituted as a bare Git repository
+        inside <code style="font-family:'JetBrains Mono',monospace;font-size:11px;
+        background:var(--s2);padding:1px 5px;border-radius:3px">GITDR_TEMP_DIR/restores/</code>
+        on the server (default: <code style="font-family:'JetBrains Mono',monospace;font-size:11px;
+        background:var(--s2);padding:1px 5px;border-radius:3px">./data/tmp/restores/</code>).
+        Optionally push all refs to a new remote to complete the migration.
+      </p>
+    </div>
+    <div style="padding:0 24px 20px">
+      <label style="display:block;font-size:12px;font-weight:500;margin-bottom:6px;color:var(--muted)">
+        PUSH TO REMOTE (optional)
+      </label>
+      <input id="restore-push-url" type="text"
+             placeholder="https://github.com/org/new-repo.git  or  ssh://git@host/repo.git"
+             style="width:100%;box-sizing:border-box;background:var(--s2);border:1px solid var(--b1);
+                    border-radius:6px;padding:8px 10px;color:var(--text);font-size:13px;font-family:inherit">
+      <p style="margin:6px 0 0;font-size:11px;color:var(--muted)">
+        Accepts <code style="font-family:'JetBrains Mono',monospace;font-size:10px;
+        background:var(--s2);padding:1px 4px;border-radius:3px">https://</code> or
+        <code style="font-family:'JetBrains Mono',monospace;font-size:10px;
+        background:var(--s2);padding:1px 4px;border-radius:3px">ssh://</code> URLs.
+        Leave blank to keep the restored repo on the server only.
+      </p>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;padding:14px 24px;
+                border-top:1px solid var(--b1);background:var(--s2);border-radius:0 0 10px 10px">
+      <button type="submit" class="btn btn-ghost btn-sm">Cancel</button>
+      <button type="button" class="btn btn-primary btn-sm" id="restore-submit-btn"
+              onclick="submitRestore('{{ run.id }}')">
+        Start Restore
+      </button>
+    </div>
+  </form>
+</dialog>
+
+<script>
+function submitRestore(runId) {
+  const pushUrl = document.getElementById('restore-push-url').value.trim();
+  const body = pushUrl ? JSON.stringify({push_url: pushUrl}) : '{}';
+  fetch('/api/v1/runs/' + runId + '/restore', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: body,
+  }).then(r => {
+    document.getElementById('restore-modal').close();
+    if (r.ok) {
+      showToast('Restore queued', 'ok');
+      // Trigger the history panel to refresh
+      htmx.trigger('#restore-history', 'refresh');
+    } else {
+      r.json().then(d => showToast('Restore failed: ' + (d.detail || r.status), 'error'));
+    }
+  }).catch(() => showToast('Network error', 'error'));
+}
+</script>
+
+<div class="page-body">
+  <div class="col-2" style="grid-template-columns: 1fr 1fr; align-items: start;">
+
+    <!-- Run metrics -->
+    <div>
+      <div class="card">
+        <div class="card-header"><span class="card-title">Run Details</span></div>
+        <div class="card-body" style="padding: 0 20px;">
+          <div class="kv-list">
+            <div class="kv-row">
+              <span class="kv-key">Run ID</span>
+              <span class="kv-val mono" style="font-size:10px">{{ run.id }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Status</span>
+              <span class="kv-val"><span class="badge badge-{{ run.status }}">{{ run.status }}</span></span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Repository</span>
+              <span class="kv-val">
+                {% if repo %}
+                <a href="/sources/{{ repo.source_id }}" style="transition:color .1s"
+                   onmouseenter="this.style.color='var(--mint)'" onmouseleave="this.style.color=''">
+                  {{ repo.repo_name }}
+                </a>
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Job</span>
+              <span class="kv-val">
+                {% if job %}
+                <a href="/jobs/{{ job.id }}" style="transition:color .1s"
+                   onmouseenter="this.style.color='var(--mint)'" onmouseleave="this.style.color=''">
+                  {{ job.name }}
+                </a>
+                {% else %}—{% endif %}
+              </span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Archive Size</span>
+              <span class="kv-val mono" style="font-size:16px;font-weight:500">
+                {{ run.size_bytes|humanize_bytes if run.size_bytes else '—' }}
+              </span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Duration</span>
+              <span class="kv-val mono">{{ run.duration_secs|format_duration if run.duration_secs else '—' }}</span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Started</span>
+              <span class="kv-val mono" style="font-size:11px">
+                {{ run.started_at.strftime('%Y-%m-%d %H:%M:%S UTC') if run.started_at else '—' }}
+              </span>
+            </div>
+            <div class="kv-row">
+              <span class="kv-key">Completed</span>
+              <span class="kv-val mono" style="font-size:11px">
+                {{ run.completed_at.strftime('%Y-%m-%d %H:%M:%S UTC') if run.completed_at else '—' }}
+              </span>
+            </div>
+            {% if run.archive_path %}
+            <div class="kv-row">
+              <span class="kv-key">Archive Path</span>
+              <span class="kv-val mono" style="font-size:10px;word-break:break-all">{{ run.archive_path }}</span>
+            </div>
+            {% endif %}
+          </div>
+        </div>
+      </div>
+
+      {% if run.checksum_sha256 %}
+      <div class="card mt-4">
+        <div class="card-header"><span class="card-title">Integrity</span></div>
+        <div class="card-body">
+          <div class="mono" style="font-size:10px;color:var(--muted);margin-bottom:4px">SHA-256 CHECKSUM</div>
+          <div class="mono" style="font-size:11px;color:var(--mint);word-break:break-all;line-height:1.6">{{ run.checksum_sha256 }}</div>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if run.error_message %}
+      <div class="card mt-4" style="border-color:rgba(255,77,106,.3)">
+        <div class="card-header" style="background:var(--coral-dim)">
+          <span class="card-title" style="color:var(--coral)">Error</span>
+        </div>
+        <div class="card-body">
+          <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--coral);
+                     white-space:pre-wrap;word-break:break-word;margin:0;line-height:1.6">{{ run.error_message }}</pre>
+        </div>
+      </div>
+      {% endif %}
+
+      {% if run.log_output %}
+      <div class="card mt-4">
+        <div class="card-header">
+          <span class="card-title">Execution Log</span>
+        </div>
+        <div class="card-body" style="padding:0">
+          <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);
+                     white-space:pre-wrap;word-break:break-word;margin:0;line-height:1.6;
+                     max-height:400px;overflow-y:auto;padding:14px 16px;background:var(--surface2);
+                     border-radius:0 0 8px 8px">{{ run.log_output }}</pre>
+        </div>
+      </div>
+      {% endif %}
+    </div>
+
+    <!-- Ref manifest -->
+    <div class="card">
+      <div class="card-header">
+        <span class="card-title">Ref Manifest</span>
+        {% if run.ref_manifest %}
+        <span class="mono text-muted" style="font-size:10px">{{ run.ref_manifest|parse_ref_manifest|length }} refs</span>
+        {% endif %}
+      </div>
+      {% if run.ref_manifest %}
+      <div class="table-wrap">
+        <table class="dt">
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th class="text-right">SHA</th>
+            </tr>
+          </thead>
+          <tbody>
+          {% for ref, sha in run.ref_manifest|parse_ref_manifest %}
+            <tr>
+              <td>
+                <span class="chip {% if ref.startswith('refs/heads/') %}chip-mint{% elif ref.startswith('refs/tags/') %}chip-amber{% else %}chip-sky{% endif %}">
+                  {{ ref.replace('refs/heads/', '').replace('refs/tags/', 'tag: ').replace('refs/pull/', 'pr: ') }}
+                </span>
+              </td>
+              <td class="text-right mono text-muted" style="font-size:10px">
+                {{ sha[:12] if sha else '—' }}
+              </td>
+            </tr>
+          {% endfor %}
+          </tbody>
+        </table>
+      </div>
+      {% else %}
+      <div class="empty" style="padding: 32px;">
+        <div class="empty-title">No manifest</div>
+        <div class="empty-sub">Ref manifest not available for this run.</div>
+      </div>
+      {% endif %}
+    </div>
+
+  </div>
+
+  <!-- Restore history panel -->
+  {% if run.status == 'success' %}
+  <div id="restore-history" style="margin-top:24px"
+       hx-get="/partials/restore-history/{{ run.id }}"
+       hx-trigger="load, refresh from:body"
+       hx-swap="innerHTML">
+    <div class="card">
+      <div class="card-header"><span class="card-title">Restore History</span></div>
+      <div class="card-body">
+        <div class="empty" style="padding:24px">
+          <div class="empty-sub">Loading restore history…</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  {% endif %}
+</div>
+{% endblock %}

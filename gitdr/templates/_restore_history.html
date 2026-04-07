@@ -1,0 +1,101 @@
+{#
+  _restore_history.html — HTMX partial for the restore history card on run_detail.html
+
+  Context variables:
+    run          BackupRun
+    restore_runs list[RestoreRun] newest-first
+#}
+{% set active = restore_runs | selectattr('status', 'in', ['pending', 'running']) | list %}
+<div class="card"
+  {% if active %}
+  hx-get="/partials/restore-history/{{ run.id }}"
+  hx-trigger="every 3s"
+  hx-swap="outerHTML"
+  {% endif %}>
+  <div class="card-header">
+    <span class="card-title">Restore History</span>
+    <span class="mono text-muted" style="font-size:10px">{{ restore_runs|length }} attempt{{ 's' if restore_runs|length != 1 }}</span>
+  </div>
+
+  {% if not restore_runs %}
+  <div class="card-body">
+    <div class="empty" style="padding:24px">
+      <div class="empty-title">No restores yet</div>
+      <div class="empty-sub">Click <strong>Restore</strong> above to initiate one.</div>
+    </div>
+  </div>
+  {% else %}
+  <div style="padding:0">
+    {% for rr in restore_runs %}
+    <div style="padding:14px 20px;border-top:{% if loop.first %}0{% else %}1px solid var(--b1){% endif %}">
+
+      <!-- Status row -->
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span class="badge badge-{{ rr.status }}"
+          {% if rr.status in ('pending','running') %}
+          style="animation: pulse 1.5s ease-in-out infinite"
+          {% endif %}>{{ rr.status }}</span>
+
+        <span class="mono" style="font-size:10px;color:var(--muted)">{{ rr.id }}</span>
+
+        {% if rr.completed_at %}
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)">
+          {{ rr.completed_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}
+        </span>
+        {% elif rr.started_at %}
+        <span style="margin-left:auto;font-size:11px;color:var(--muted)">
+          started {{ rr.started_at.strftime('%H:%M:%S UTC') }}
+        </span>
+        {% endif %}
+      </div>
+
+      <!-- Push URL -->
+      {% if rr.push_url %}
+      <div style="font-size:12px;margin-bottom:8px">
+        <span style="color:var(--muted)">Push target:</span>
+        <span class="mono" style="font-size:11px;color:var(--mint)">{{ rr.push_url }}</span>
+      </div>
+      {% endif %}
+
+      <!-- Restore dir -->
+      {% if rr.restore_dir and rr.status == 'success' and not rr.push_url %}
+      <div style="font-size:12px;margin-bottom:8px;line-height:1.6">
+        <span style="color:var(--muted)">Restored to (on server):</span>
+        <code class="mono" style="font-size:11px;word-break:break-all;display:block;margin-top:4px;
+               background:var(--s2);padding:6px 10px;border-radius:5px;color:var(--text)">{{ rr.restore_dir }}</code>
+        <span style="font-size:11px;color:var(--muted)">This is a bare git repository inside the container.
+          Mount <code style="font-family:'JetBrains Mono',monospace;font-size:10px;background:var(--s2);padding:1px 4px;border-radius:3px">GITDR_TEMP_DIR/restores/</code> as a volume to access it from the host.
+        </span>
+      </div>
+      {% endif %}
+
+      <!-- Error -->
+      {% if rr.error_message %}
+      <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--coral);
+                 white-space:pre-wrap;word-break:break-word;margin:0 0 8px;line-height:1.5;
+                 background:var(--coral-dim);border-radius:6px;padding:10px 12px">{{ rr.error_message }}</pre>
+      {% endif %}
+
+      <!-- Log output (collapsible) -->
+      {% if rr.log_output %}
+      <details style="margin-top:4px">
+        <summary style="cursor:pointer;font-size:12px;color:var(--muted);user-select:none;
+                        list-style:none;display:flex;align-items:center;gap:6px">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"
+               style="width:12px;height:12px;transition:transform .2s" class="details-arrow">
+            <path d="M4 6l4 4 4-4"/>
+          </svg>
+          Operation log
+        </summary>
+        <pre style="font-family:'JetBrains Mono',monospace;font-size:11px;color:var(--muted);
+                   white-space:pre-wrap;word-break:break-word;margin:8px 0 0;line-height:1.6;
+                   background:var(--s2);border-radius:6px;padding:10px 12px;
+                   max-height:300px;overflow-y:auto">{{ rr.log_output }}</pre>
+      </details>
+      {% endif %}
+
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</div>
